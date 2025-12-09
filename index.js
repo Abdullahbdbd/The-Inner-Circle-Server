@@ -24,19 +24,28 @@ async function run() {
     await client.connect();
 
     const db = client.db("the_inner_circle_db");
-    // const userCollection = db.collection("user");
+    const userCollection = db.collection("user");
     const lessonsCollection = db.collection("lessons");
 
     //users related apis
-    // app.post("/users", async (req, res) => {
-    //   const user = req.body;
-    //   user.role = "user";
-    //   user.createdAt = new Date();
-    //   user.isPremium = false;
+    //add users
+    app.post("/users", async (req, res) => {
+      const user = req.body;
+      user.role = "user";
+      user.createdAt = new Date();
+      user.isPremium = false;
+      const email = user.email;
 
-    //   const result = await userCollection.insertOne(user);
-    //   res.send(result);
-    // });
+      const userExists = await userCollection.findOne({email})
+
+      if(userExists){
+        return res.send({message:'user exists'})
+      }
+
+
+      const result = await userCollection.insertOne(user);
+      res.send(result);
+    });
 
     //Lessons related apis
     //get lessons
@@ -65,7 +74,7 @@ async function run() {
         query.creatorEmail = email;
       }
 
-      const cursor = lessonsCollection.find(query);
+      const cursor = lessonsCollection.find(query).sort({createdAt: -1});
       const result = await cursor.toArray();
       res.send(result);
     });
