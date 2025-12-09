@@ -21,7 +21,6 @@ const client = new MongoClient(uri, {
 
 async function run() {
   try {
-
     await client.connect();
 
     const db = client.db("the_inner_circle_db");
@@ -39,16 +38,37 @@ async function run() {
     //   res.send(result);
     // });
 
-
     //Lessons related apis
+    //get lessons
+    app.get("/public-lessons", async (req, res) => {
+      const cursor = lessonsCollection.find();
+      const result = await cursor.toArray();
+      res.send(result);
+    });
+
+    // add lessons
     app.post("/add-lessons", async (req, res) => {
       const lessons = req.body;
+      lessons.isFeatured = false;
+      lessons.createdAt = new Date();
 
       const result = await lessonsCollection.insertOne(lessons);
       res.send(result);
     });
 
+    // my lessons
+    app.get("/my-lessons", async (req, res) => {
+      const query = {};
+      const { email } = req.query;
 
+      if (email) {
+        query.creatorEmail = email;
+      }
+
+      const cursor = lessonsCollection.find(query);
+      const result = await cursor.toArray();
+      res.send(result);
+    });
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
