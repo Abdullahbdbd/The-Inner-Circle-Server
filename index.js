@@ -3,6 +3,8 @@ const cors = require("cors");
 const app = express();
 require("dotenv").config();
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
+
 const port = process.env.PORT || 3000;
 
 //middleware
@@ -36,14 +38,21 @@ async function run() {
       user.isPremium = false;
       const email = user.email;
 
-      const userExists = await userCollection.findOne({email})
+      const userExists = await userCollection.findOne({ email });
 
-      if(userExists){
-        return res.send({message:'user exists'})
+      if (userExists) {
+        return res.send({ message: "user exists" });
       }
 
-
       const result = await userCollection.insertOne(user);
+      res.send(result);
+    });
+
+    //get single user
+    app.get("/users/:email", async (req, res) => {
+      const email = req.params.email;
+      const query = { email: email };
+      const result = await userCollection.findOne(query);
       res.send(result);
     });
 
@@ -74,17 +83,83 @@ async function run() {
         query.creatorEmail = email;
       }
 
-      const cursor = lessonsCollection.find(query).sort({createdAt: -1});
+      const cursor = lessonsCollection.find(query).sort({ createdAt: -1 });
       const result = await cursor.toArray();
       res.send(result);
     });
 
     //delete lesson
-    app.delete('/public-lessons/:id', async(req, res)=>{
-        const id = req.params.id;
-        const query ={_id: new ObjectId(id)}
-        const result = await lessonsCollection.deleteOne(query);
-        res.send(result);
+    app.delete("/public-lessons/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await lessonsCollection.deleteOne(query);
+      res.send(result);
+    });
+
+    //update lesson
+    app.patch("/public-lessons/:id", async (req, res) => {
+      const { id } = req.params;
+      const updateData = req.body;
+
+      const result = await lessonsCollection.updateOne(
+        { _id: new ObjectId(id) },
+        { $set: updateData }
+      );
+
+      res.send(result);
+    });
+
+    //payment related apis
+    app.post("/create-checkout-session", async (req, res) => {
+      const paymentInfo = req.body;
+      console.log(paymentInfo);
+
+      const session = await stripe.checkout.sessions.create({
+        line_items: [
+          {
+            price_data: {
+              currency: "bdt",
+              unit_amount: 1500 * 100,
+              product_data: {
+                name: "Digital Life Lessons Premium Plan",
+                description: "Lifetime premium access",
+              },
+            },
+            quantity: 1,
+          },
+        ],
+        customer_email: paymentInfo.email,
+        mode: "payment",
+        metadata: {
+          userId: paymentInfo._id,
+        },
+        success_url: `${process.env.SITE_DOMAIN}/payment-success?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${process.env.SITE_DOMAIN}/payment-cancelled`,
+      });
+
+      console.log(session);
+      res.send({ url: session.url });
+    });
+
+    // update after payment
+    app.patch('/payment-success', async(req,res)=>{
+        const sessionId = req.query.session_id;
+        const session = await stripe.checkout.sessions.retrieve(sessionId)
+        console.log(session);
+        
+        if(session.payment_status==='paid'){
+          const id = session.metadata.userId;
+          const query = {_id: new ObjectId(id)}
+          const update={
+            $set:{
+                isPremium: true
+            }
+          }
+
+          const result = await userCollection.updateOne(query, update);
+          res.send(result)
+        }
+        res.send({success: false })
     })
 
     // Send a ping to confirm a successful connection
