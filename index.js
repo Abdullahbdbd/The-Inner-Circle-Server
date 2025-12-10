@@ -50,10 +50,10 @@ async function run() {
 
     //get single user
     app.get("/users/:email", async (req, res) => {
-      const email = req.params.email;
-      const query = { email: email };
-      const result = await userCollection.findOne(query);
-      res.send(result);
+      const { email } = req.params;
+      const user = await userCollection.findOne({ email });
+      if (!user) return res.status(404).send({ message: "User not found" });
+      res.send(user);
     });
 
     //Lessons related apis
@@ -142,25 +142,38 @@ async function run() {
     });
 
     // update after payment
-    app.patch('/payment-success', async(req,res)=>{
-        const sessionId = req.query.session_id;
-        const session = await stripe.checkout.sessions.retrieve(sessionId)
-        console.log(session);
-        
-        if(session.payment_status==='paid'){
-          const id = session.metadata.userId;
-          const query = {_id: new ObjectId(id)}
-          const update={
-            $set:{
-                isPremium: true
-            }
-          }
+    app.patch("/payment-success", async (req, res) => {
+      const sessionId = req.query.session_id;
+      const session = await stripe.checkout.sessions.retrieve(sessionId);
+      console.log(session);
 
-          const result = await userCollection.updateOne(query, update);
-          res.send(result)
-        }
-        res.send({success: false })
-    })
+      if (session.payment_status === "paid") {
+        const id = session.metadata.userId;
+        const query = { _id: new ObjectId(id) };
+        const update = {
+          $set: {
+            isPremium: true,
+          },
+        };
+
+        const result = await userCollection.updateOne(query, update);
+        res.send(result);
+      }
+      res.send({ success: false });
+    });
+
+    //Details Lessons related apis
+     //get single lesson
+    app.get("/public-lessons/:id", async (req, res) => {
+      const { id } = req.params;
+      const query = { _id: new ObjectId(id) };
+      const lesson = await lessonsCollection.findOne(query);
+      if (!lesson) return res.status(404).send({ message: "Lesson not found" });
+      res.send(lesson);
+    });
+ 
+
+
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
