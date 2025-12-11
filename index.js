@@ -163,7 +163,7 @@ async function run() {
     });
 
     //Details Lessons related apis
-     //get single lesson
+    //get single lesson
     app.get("/public-lessons/:id", async (req, res) => {
       const { id } = req.params;
       const query = { _id: new ObjectId(id) };
@@ -171,9 +171,39 @@ async function run() {
       if (!lesson) return res.status(404).send({ message: "Lesson not found" });
       res.send(lesson);
     });
- 
 
+    // Toggle like for a lesson
+    app.patch("/public-lessons/:id/like", async (req, res) => {
+      const lessonId = req.params.id;
+      const { userId } = req.body;
 
+      const lesson = await lessonsCollection.findOne({
+        _id: new ObjectId(lessonId),
+      });
+      if (!lesson) return res.status(404).send({ message: "Lesson not found" });
+
+      const alreadyLiked = lesson.likes?.includes(userId);
+
+      let updatedLesson;
+      if (alreadyLiked) {
+        updatedLesson = await lessonsCollection.updateOne(
+          { _id: new ObjectId(lessonId) },
+          { $pull: { likes: userId }, $inc: { likesCount: -1 } }
+        );
+      } else {
+        updatedLesson = await lessonsCollection.updateOne(
+          { _id: new ObjectId(lessonId) },
+          { $addToSet: { likes: userId }, $inc: { likesCount: 1 } }
+        );
+      }
+
+      const updated = await lessonsCollection.findOne({
+        _id: new ObjectId(lessonId),
+      });
+      res.send(updated);
+    });
+
+    
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
