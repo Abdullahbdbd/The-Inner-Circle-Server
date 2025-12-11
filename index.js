@@ -203,6 +203,38 @@ async function run() {
       res.send(updated);
     });
 
+    // Toggle favorite for a lesson
+    app.patch("/public-lessons/:id/favorite", async (req, res) => {
+      const lessonId = req.params.id;
+      const { userId } = req.body;
+
+      const lesson = await lessonsCollection.findOne({
+        _id: new ObjectId(lessonId),
+      });
+      if (!lesson) return res.status(404).send({ message: "Lesson not found" });
+
+      const alreadyFavorited = lesson.favorites?.includes(userId);
+
+      if (alreadyFavorited) {
+        // Remove from favorites
+        await lessonsCollection.updateOne(
+          { _id: new ObjectId(lessonId) },
+          { $pull: { favorites: userId }, $inc: { favoritesCount: -1 } }
+        );
+      } else {
+        // Add to favorites
+        await lessonsCollection.updateOne(
+          { _id: new ObjectId(lessonId) },
+          { $addToSet: { favorites: userId }, $inc: { favoritesCount: 1 } }
+        );
+      }
+
+      const updated = await lessonsCollection.findOne({
+        _id: new ObjectId(lessonId),
+      });
+      res.send(updated);
+    });
+
     
 
     // Send a ping to confirm a successful connection
