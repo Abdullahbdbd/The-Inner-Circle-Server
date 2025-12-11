@@ -256,6 +256,33 @@ async function run() {
       res.send(result);
     });
 
+    // Get related lessons by category or tone
+    app.get("/public-lessons/:id/related", async (req, res) => {
+      const lessonId = req.params.id;
+      const currentLesson = await lessonsCollection.findOne({
+        _id: new ObjectId(lessonId),
+      });
+      
+      if (!currentLesson)
+        return res.status(404).send({ message: "Lesson not found" });
+
+      const relatedLessons = await lessonsCollection
+        .find({
+          _id: { $ne: new ObjectId(lessonId) }, // exclude current lesson
+          $or: [
+            { category: currentLesson.category },
+            { tone: currentLesson.tone },
+          ],
+          privacy: "Public",
+        })
+        .limit(6)
+        .toArray();
+
+      res.send(relatedLessons);
+    });
+
+
+
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log(
