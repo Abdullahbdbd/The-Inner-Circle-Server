@@ -235,7 +235,26 @@ async function run() {
       res.send(updated);
     });
 
-    
+    // Add new comment
+    app.post("/public-lessons/:id/comment", async (req, res) => {
+      const lessonId = req.params.id;
+      const { userId, userName, userPhoto, text } = req.body;
+
+      const comment = {
+        userId,
+        userName,
+        userPhoto,
+        text,
+        time: new Date(),
+      };
+
+      const result = await lessonsCollection.updateOne(
+        { _id: new ObjectId(lessonId) },
+        { $push: { comments: comment } }
+      );
+
+      res.send(result);
+    });
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
