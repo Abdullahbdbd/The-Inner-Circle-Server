@@ -96,17 +96,35 @@ async function run() {
       res.send(result);
     });
 
-    //update lesson
-    app.patch("/public-lessons/:id", async (req, res) => {
-      const { id } = req.params;
-      const updateData = req.body;
+    //Update Lesson
+    app.put("/public-lessons/:id", async (req, res) => {
+      try {
+        const id = req.params.id;
+        const updatedLesson = req.body;
 
-      const result = await lessonsCollection.updateOne(
-        { _id: new ObjectId(id) },
-        { $set: updateData }
-      );
+        const updateDoc = {
+          $set: {
+            title: updatedLesson.title,
+            description: updatedLesson.description,
+            category: updatedLesson.category,
+            tone: updatedLesson.tone,
+            image: updatedLesson.image,
+            privacy: updatedLesson.privacy,
+            accessLevel: updatedLesson.accessLevel,
+            updatedAt: new Date(),
+          },
+        };
 
-      res.send(result);
+        const result = await lessonsCollection.updateOne(
+          { _id: new ObjectId(id) },
+          updateDoc
+        );
+
+        res.send(result);
+      } catch (error) {
+        console.error("Error updating lesson:", error);
+        res.status(500).send({ message: "Failed to update lesson" });
+      }
     });
 
     //payment related apis
@@ -262,7 +280,7 @@ async function run() {
       const currentLesson = await lessonsCollection.findOne({
         _id: new ObjectId(lessonId),
       });
-      
+
       if (!currentLesson)
         return res.status(404).send({ message: "Lesson not found" });
 
@@ -280,8 +298,6 @@ async function run() {
 
       res.send(relatedLessons);
     });
-
-
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
