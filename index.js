@@ -88,6 +88,20 @@ async function run() {
       res.send(result);
     });
 
+     //favorite lessons
+    app.get("/favorites/:userId", async (req, res) => {
+      try {
+        const { userId } = req.params;
+        const favorites = await lessonsCollection
+          .find({ favorites: userId })
+          .toArray();
+        res.send(favorites);
+      } catch (error) {
+        console.error(error);
+        res.status(500).send({ message: "Failed to load favorites" });
+      }
+    });
+
     //delete lesson
     app.delete("/public-lessons/:id", async (req, res) => {
       const id = req.params.id;
