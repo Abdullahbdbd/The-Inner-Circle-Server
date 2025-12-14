@@ -85,6 +85,76 @@ async function run() {
       res.send(result);
     });
 
+    // Dashboard related apis
+    // dashboard Summary Route
+    app.get("/summary/:email", async (req, res) => {
+      const { email } = req.params;
+
+      const user = await userCollection.findOne({ email });
+      if (!user) return res.status(404).send({ message: "User not found" });
+
+      const totalLessons = await lessonsCollection.countDocuments({
+        creatorEmail: email,
+      });
+
+      const totalFavorites = await lessonsCollection.countDocuments({
+        favorites: { $in: [email] },
+      });
+
+      const recentLessons = await lessonsCollection
+        .find({ creatorEmail: email })
+        .sort({ createdAt: -1 })
+        .limit(3)
+        .toArray();
+
+      res.send({
+        totalLessons,
+        totalFavorites,
+        recentLessons,
+      });
+    });
+
+    // Analytics Route
+    app.get("/analytics/:email", async (req, res) => {
+      const { email } = req.params;
+
+      try {
+        const analytics = await lessonsCollection
+          .aggregate([
+            {
+              $match: {
+                creatorEmail: email,
+                createdAt: { $exists: true },
+              },
+            },
+            {
+              $addFields: {
+                createdAtDate: {
+                  $toDate: "$createdAt",
+                },
+              },
+            },
+            {
+              $group: {
+                _id: {
+                  month: { $month: "$createdAtDate" },
+                  category: "$category",
+                  tone: "$tone",
+                },
+                total: { $sum: 1 },
+              },
+            },
+            { $sort: { "_id.month": 1 } },
+          ])
+          .toArray();
+
+        res.send(analytics);
+      } catch (error) {
+        console.error("Analytics error:", error);
+        res.status(500).send({ message: "Error fetching analytics" });
+      }
+    });
+
     // add lessons
     app.post("/add-lessons", async (req, res) => {
       const lessons = req.body;
@@ -258,32 +328,28 @@ async function run() {
 
     // Toggle favorite for a lesson
     app.patch("/public-lessons/:id/favorite", async (req, res) => {
-      const lessonId = req.params.id;
+      const { id } = req.params;
       const { userId } = req.body;
 
-      const lesson = await lessonsCollection.findOne({
-        _id: new ObjectId(lessonId),
-      });
+      const lesson = await lessonsCollection.findOne({ _id: new ObjectId(id) });
       if (!lesson) return res.status(404).send({ message: "Lesson not found" });
 
       const alreadyFavorited = lesson.favorites?.includes(userId);
 
       if (alreadyFavorited) {
-        // Remove from favorites
         await lessonsCollection.updateOne(
-          { _id: new ObjectId(lessonId) },
+          { _id: new ObjectId(id) },
           { $pull: { favorites: userId }, $inc: { favoritesCount: -1 } }
         );
       } else {
-        // Add to favorites
         await lessonsCollection.updateOne(
-          { _id: new ObjectId(lessonId) },
+          { _id: new ObjectId(id) },
           { $addToSet: { favorites: userId }, $inc: { favoritesCount: 1 } }
         );
       }
 
       const updated = await lessonsCollection.findOne({
-        _id: new ObjectId(lessonId),
+        _id: new ObjectId(id),
       });
       res.send(updated);
     });
