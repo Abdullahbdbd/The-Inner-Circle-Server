@@ -56,6 +56,27 @@ async function run() {
       res.send(user);
     });
 
+    // Get single user info
+    app.get("/users/:email", async (req, res) => {
+      const { email } = req.params;
+      const user = await userCollection.findOne({ email });
+      if (!user) return res.status(404).send({ message: "User not found" });
+      res.send(user);
+    });
+
+    // Update user profile (name or photo)
+    app.patch("/users/:email", async (req, res) => {
+      const { email } = req.params;
+      const { displayName, photoURL } = req.body;
+
+      const result = await userCollection.updateOne(
+        { email },
+        { $set: { displayName, photoURL } }
+      );
+
+      res.send(result);
+    });
+
     //Lessons related apis
     //get lessons
     app.get("/public-lessons", async (req, res) => {
@@ -88,7 +109,7 @@ async function run() {
       res.send(result);
     });
 
-     //favorite lessons
+    //favorite lessons
     app.get("/favorites/:userId", async (req, res) => {
       try {
         const { userId } = req.params;
