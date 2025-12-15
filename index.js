@@ -30,26 +30,52 @@ async function run() {
     const lessonsCollection = db.collection("lessons");
 
     //users related apis
-    // get users
-    app.get('/users', async(req,res)=>{
-      const cursor = userCollection.find();
-      const result = await cursor.toArray();
-      res.send(result)
-    })
+    // Get all users
+    app.get("/users", async (req, res) => {
+      try {
+        const users = await userCollection
+          .aggregate([
+            {
+              $lookup: {
+                from: "lessons",
+                localField: "email", 
+                foreignField: "creatorEmail",
+                as: "userLessons",
+              },
+            },
+            {
+              $addFields: {
+                totalLessons: { $size: "$userLessons" },
+              },
+            },
+            {
+              $project: {
+                userLessons: 0,
+              },
+            },
+          ])
+          .toArray();
+
+        res.send(users);
+      } catch (error) {
+        console.error("Error loading users:", error);
+        res.status(500).send({ message: "Failed to load users" });
+      }
+    });
 
     //make admin
-    app.patch('/users/:id', async(req,res)=>{
+    app.patch("/users/:id", async (req, res) => {
       const id = req.params.id;
       const roleInfo = req.body;
-      const query = {_id: new ObjectId(id)}
-      const updatedDoc={
-        $set:{
-          role: roleInfo.role
-        }
-      }
-      const result = await userCollection.updateOne(query, updatedDoc)
-      res.send(result)
-    })
+      const query = { _id: new ObjectId(id) };
+      const updatedDoc = {
+        $set: {
+          role: roleInfo.role,
+        },
+      };
+      const result = await userCollection.updateOne(query, updatedDoc);
+      res.send(result);
+    });
 
     //add users
     app.post("/users", async (req, res) => {
@@ -67,14 +93,6 @@ async function run() {
 
       const result = await userCollection.insertOne(user);
       res.send(result);
-    });
-
-    //get single user
-    app.get("/users/:email", async (req, res) => {
-      const { email } = req.params;
-      const user = await userCollection.findOne({ email });
-      if (!user) return res.status(404).send({ message: "User not found" });
-      res.send(user);
     });
 
     // Get single user info
@@ -97,6 +115,14 @@ async function run() {
 
       res.send(result);
     });
+
+    // get user role
+    app.get('/users/:email/role', async(req,res)=>{
+      const email = req.params.email;
+      const query ={email}
+      const user = await userCollection.findOne(query);
+      res.send({role: user?.role || 'user'})
+    })
 
     //Lessons related apis
     //get lessons
