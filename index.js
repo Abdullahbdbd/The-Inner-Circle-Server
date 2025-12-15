@@ -28,6 +28,7 @@ async function run() {
     const db = client.db("the_inner_circle_db");
     const userCollection = db.collection("user");
     const lessonsCollection = db.collection("lessons");
+    const lessonsReportsCollection = db.collection("lessonReports");
 
     //users related apis
     // Get all users
@@ -38,7 +39,7 @@ async function run() {
             {
               $lookup: {
                 from: "lessons",
-                localField: "email", 
+                localField: "email",
                 foreignField: "creatorEmail",
                 as: "userLessons",
               },
@@ -117,12 +118,12 @@ async function run() {
     });
 
     // get user role
-    app.get('/users/:email/role', async(req,res)=>{
+    app.get("/users/:email/role", async (req, res) => {
       const email = req.params.email;
-      const query ={email}
+      const query = { email };
       const user = await userCollection.findOne(query);
-      res.send({role: user?.role || 'user'})
-    })
+      res.send({ role: user?.role || "user" });
+    });
 
     //Lessons related apis
     //get lessons
@@ -445,6 +446,105 @@ async function run() {
         .toArray();
 
       res.send(relatedLessons);
+    });
+
+    // Report a lesson
+    app.post("/lessons/:id/report", async (req, res) => {
+      const { id } = req.params;
+      const { reporterEmail, reason } = req.body;
+
+      const reportData = {
+        lessonId: id,
+        reporterEmail,
+        reason,
+        timestamp: new Date(),
+      };
+
+      try {
+        const result = await lessonsReportsCollection.insertOne(reportData);
+        res.send(result);
+      } catch (error) {
+        console.error("Error reporting lesson:", error);
+        res.status(500).send({ message: "Failed to report lesson" });
+      }
+    });
+
+    // Admin Dashboard Summary API
+    app.get("/admin-summary", async (req, res) => {
+      try {
+        // total users
+        const totalUsers = await userCollection.estimatedDocumentCount();
+
+        // total public lessons
+        const totalPublicLessons = await lessonsCollection.countDocuments({
+          privacy: "Public",
+        });
+
+        // total reported lessons
+        const totalReports =
+          await lessonsReportsCollection.estimatedDocumentCount();
+
+        // most active contributors (top 3 users by lesson count)
+        const topContributors = await lessonsCollection
+          .aggregate([
+            {
+              $group: {
+                _id: "$creatorEmail",
+                totalLessons: { $sum: 1 },
+                creatorName: { $first: "$creatorName" },
+                creatorPhoto: { $first: "$creatorPhoto" },
+              },
+            },
+            { $sort: { totalLessons: -1 } },
+            { $limit: 3 },
+          ])
+          .toArray();
+
+        // today's new lessons
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const todaysLessons = await lessonsCollection.countDocuments({
+          createdAt: { $gte: today },
+        });
+
+        // growth analytics (monthly)
+        const monthlyGrowth = await lessonsCollection
+          .aggregate([
+            {
+              $group: {
+                _id: { month: { $month: "$createdAt" } },
+                lessons: { $sum: 1 },
+              },
+            },
+            { $sort: { "_id.month": 1 } },
+          ])
+          .toArray();
+
+        const userGrowth = await userCollection
+          .aggregate([
+            {
+              $group: {
+                _id: { month: { $month: "$createdAt" } },
+                users: { $sum: 1 },
+              },
+            },
+            { $sort: { "_id.month": 1 } },
+          ])
+          .toArray();
+
+        res.send({
+          totalUsers,
+          totalPublicLessons,
+          totalReports,
+          topContributors,
+          todaysLessons,
+          monthlyGrowth,
+          userGrowth,
+        });
+      } catch (error) {
+        console.error("Error in admin summary:", error);
+        res.status(500).send({ message: "Failed to load admin summary" });
+      }
     });
 
     // Send a ping to confirm a successful connection
