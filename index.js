@@ -30,6 +30,27 @@ async function run() {
     const lessonsCollection = db.collection("lessons");
 
     //users related apis
+    // get users
+    app.get('/users', async(req,res)=>{
+      const cursor = userCollection.find();
+      const result = await cursor.toArray();
+      res.send(result)
+    })
+
+    //make admin
+    app.patch('/users/:id', async(req,res)=>{
+      const id = req.params.id;
+      const roleInfo = req.body;
+      const query = {_id: new ObjectId(id)}
+      const updatedDoc={
+        $set:{
+          role: roleInfo.role
+        }
+      }
+      const result = await userCollection.updateOne(query, updatedDoc)
+      res.send(result)
+    })
+
     //add users
     app.post("/users", async (req, res) => {
       const user = req.body;
@@ -179,16 +200,16 @@ async function run() {
       res.send(result);
     });
 
-    //favorite lessons
-    app.get("/favorites/:userId", async (req, res) => {
+    // favorite lessons
+    app.get("/favorites/:email", async (req, res) => {
       try {
-        const { userId } = req.params;
+        const { email } = req.params;
         const favorites = await lessonsCollection
-          .find({ favorites: userId })
+          .find({ favorites: email }) // email দিয়ে match করবে
           .toArray();
         res.send(favorites);
       } catch (error) {
-        console.error(error);
+        console.error("Favorites fetch error:", error);
         res.status(500).send({ message: "Failed to load favorites" });
       }
     });
