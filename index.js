@@ -353,7 +353,45 @@ async function run() {
       );
       res.send(result);
     });
-    
+
+    // Get all reported lessons grouped by lessonId
+    app.get("/reported-lessons", async (req, res) => {
+      try {
+        const reports = await lessonsReportsCollection
+          .aggregate([
+            {
+              $group: {
+                _id: "$lessonId",
+                lessonId: { $first: "$lessonId" },
+                title: { $first: "$title" },
+                category: { $first: "$category" },
+                reports: {
+                  $push: {
+                    reason: "$reason",
+                    reporterEmail: "$reporterEmail",
+                    timestamp: "$timestamp",
+                  },
+                },
+                reportCount: { $sum: 1 },
+              },
+            },
+            { $sort: { reportCount: -1 } },
+          ])
+          .toArray();
+
+        res.send(reports);
+      } catch (error) {
+        console.error(error);
+        res.status(500).send({ message: "Failed to load reported lessons" });
+      }
+    });
+
+    // Delete reports for a specific lesson
+    app.delete("/reports/:lessonId", async (req, res) => {
+      const { lessonId } = req.params;
+      const result = await lessonsReportsCollection.deleteMany({ lessonId });
+      res.send(result);
+    });
 
     //Details Lessons related apis
     //get single lesson
@@ -473,9 +511,10 @@ async function run() {
     // Report a lesson
     app.post("/lessons/:id/report", async (req, res) => {
       const { id } = req.params;
-      const { reporterEmail, reason } = req.body;
+      const { reporterEmail, reason, title } = req.body;
 
       const reportData = {
+        title,
         lessonId: id,
         reporterEmail,
         reason,
