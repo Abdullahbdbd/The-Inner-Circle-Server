@@ -333,6 +333,28 @@ async function run() {
       res.send({ success: false });
     });
 
+    // Toggle featured status
+    app.patch("/lessons/:id/feature", async (req, res) => {
+      const { id } = req.params;
+      const { isFeatured } = req.body;
+      const result = await lessonsCollection.updateOne(
+        { _id: new ObjectId(id) },
+        { $set: { isFeatured } }
+      );
+      res.send(result);
+    });
+
+    // Mark as reviewed
+    app.patch("/lessons/:id/review", async (req, res) => {
+      const { id } = req.params;
+      const result = await lessonsCollection.updateOne(
+        { _id: new ObjectId(id) },
+        { $set: { reviewed: true } }
+      );
+      res.send(result);
+    });
+    
+
     //Details Lessons related apis
     //get single lesson
     app.get("/public-lessons/:id", async (req, res) => {
