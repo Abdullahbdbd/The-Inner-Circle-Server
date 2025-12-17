@@ -12,34 +12,30 @@ const admin = require("firebase-admin");
 const serviceAccount = require("./the-inner-circle-firebase-adminsdk.json");
 
 admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount)
+  credential: admin.credential.cert(serviceAccount),
 });
-
 
 //middleware
 app.use(express.json());
 app.use(cors());
 
 const verifyFBToken = async (req, res, next) => {
-    const token = req.headers.authorization;
+  const token = req.headers.authorization;
 
-    if (!token) {
-        return res.status(401).send({ message: 'unauthorized access' })
-    }
+  if (!token) {
+    return res.status(401).send({ message: "unauthorized access" });
+  }
 
-    try {
-        const idToken = token.split(' ')[1];
-        const decoded = await admin.auth().verifyIdToken(idToken);
-        console.log('decoded in the token', decoded);
-        req.decoded_email = decoded.email;
-        next();
-    }
-    catch (err) {
-        return res.status(401).send({ message: 'unauthorized access' })
-    }
-
-
-}
+  try {
+    const idToken = token.split(" ")[1];
+    const decoded = await admin.auth().verifyIdToken(idToken);
+    console.log("decoded in the token", decoded);
+    req.decoded_email = decoded.email;
+    next();
+  } catch (err) {
+    return res.status(401).send({ message: "unauthorized access" });
+  }
+};
 
 const uri = process.env.DB_URL;
 const client = new MongoClient(uri, {
@@ -58,6 +54,21 @@ async function run() {
     const userCollection = db.collection("user");
     const lessonsCollection = db.collection("lessons");
     const lessonsReportsCollection = db.collection("lessonReports");
+
+    // Home Apis
+    // get featured lessons
+    app.get("/featured-lessons", async (req, res) => {
+      try {
+        const lessons = await lessonsCollection
+          .find({ isFeatured: true })
+          .sort({ createdAt: -1 })
+          .toArray();
+        res.send(lessons);
+      } catch (error) {
+        console.error(error);
+        res.status(500).send({ message: "Failed to load featured lessons" });
+      }
+    });
 
     //users related apis
     // Get all users
@@ -286,7 +297,7 @@ async function run() {
     });
 
     //delete lesson
-    app.delete("/public-lessons/:id",verifyFBToken, async (req, res) => {
+    app.delete("/public-lessons/:id", verifyFBToken, async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await lessonsCollection.deleteOne(query);
@@ -294,7 +305,7 @@ async function run() {
     });
 
     //Update Lesson
-    app.put("/public-lessons/:id",verifyFBToken, async (req, res) => {
+    app.put("/public-lessons/:id", verifyFBToken, async (req, res) => {
       try {
         const id = req.params.id;
         const updatedLesson = req.body;
@@ -325,7 +336,7 @@ async function run() {
     });
 
     //payment related apis
-    app.post("/create-checkout-session",verifyFBToken, async (req, res) => {
+    app.post("/create-checkout-session", verifyFBToken, async (req, res) => {
       const paymentInfo = req.body;
       console.log(paymentInfo);
 
@@ -357,7 +368,7 @@ async function run() {
     });
 
     // update after payment
-    app.patch("/payment-success",verifyFBToken, async (req, res) => {
+    app.patch("/payment-success", verifyFBToken, async (req, res) => {
       const sessionId = req.query.session_id;
       const session = await stripe.checkout.sessions.retrieve(sessionId);
       console.log(session);
@@ -399,7 +410,7 @@ async function run() {
     });
 
     // Get all reported lessons grouped by lessonId
-    app.get("/reported-lessons",verifyFBToken, async (req, res) => {
+    app.get("/reported-lessons", verifyFBToken, async (req, res) => {
       try {
         const reports = await lessonsReportsCollection
           .aggregate([
@@ -431,7 +442,7 @@ async function run() {
     });
 
     // Delete reports for a specific lesson
-    app.delete("/reports/:lessonId",verifyFBToken, async (req, res) => {
+    app.delete("/reports/:lessonId", verifyFBToken, async (req, res) => {
       const { lessonId } = req.params;
       const result = await lessonsReportsCollection.deleteMany({ lessonId });
       res.send(result);
@@ -575,7 +586,7 @@ async function run() {
     });
 
     // Admin Dashboard Summary API
-    app.get("/admin-summary",verifyFBToken, async (req, res) => {
+    app.get("/admin-summary", verifyFBToken, async (req, res) => {
       try {
         // total users
         const totalUsers = await userCollection.estimatedDocumentCount();
