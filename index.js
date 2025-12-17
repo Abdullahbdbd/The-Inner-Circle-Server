@@ -7,12 +7,41 @@ const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 
 const port = process.env.PORT || 3000;
 
+const admin = require("firebase-admin");
+
+const serviceAccount = require("./the-inner-circle-firebase-adminsdk.json");
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount)
+});
+
+
 //middleware
 app.use(express.json());
 app.use(cors());
 
-const uri = process.env.DB_URL;
+const verifyFBToken = async (req, res, next) => {
+    const token = req.headers.authorization;
 
+    if (!token) {
+        return res.status(401).send({ message: 'unauthorized access' })
+    }
+
+    try {
+        const idToken = token.split(' ')[1];
+        const decoded = await admin.auth().verifyIdToken(idToken);
+        console.log('decoded in the token', decoded);
+        req.decoded_email = decoded.email;
+        next();
+    }
+    catch (err) {
+        return res.status(401).send({ message: 'unauthorized access' })
+    }
+
+
+}
+
+const uri = process.env.DB_URL;
 const client = new MongoClient(uri, {
   serverApi: {
     version: ServerApiVersion.v1,
@@ -150,7 +179,7 @@ async function run() {
 
     // Dashboard related apis
     // dashboard Summary Route
-    app.get("/summary/:email", async (req, res) => {
+    app.get("/summary/:email", verifyFBToken, async (req, res) => {
       const { email } = req.params;
 
       const user = await userCollection.findOne({ email });
@@ -178,7 +207,7 @@ async function run() {
     });
 
     // Analytics Route
-    app.get("/analytics/:email", async (req, res) => {
+    app.get("/analytics/:email", verifyFBToken, async (req, res) => {
       const { email } = req.params;
 
       try {
@@ -219,7 +248,7 @@ async function run() {
     });
 
     // add lessons
-    app.post("/add-lessons", async (req, res) => {
+    app.post("/add-lessons", verifyFBToken, async (req, res) => {
       const lessons = req.body;
       lessons.isFeatured = false;
       lessons.createdAt = new Date();
@@ -229,7 +258,7 @@ async function run() {
     });
 
     // my lessons
-    app.get("/my-lessons", async (req, res) => {
+    app.get("/my-lessons", verifyFBToken, async (req, res) => {
       const query = {};
       const { email } = req.query;
 
@@ -243,7 +272,7 @@ async function run() {
     });
 
     // favorite lessons
-    app.get("/favorites/:email", async (req, res) => {
+    app.get("/favorites/:email", verifyFBToken, async (req, res) => {
       try {
         const { email } = req.params;
         const favorites = await lessonsCollection
@@ -257,7 +286,7 @@ async function run() {
     });
 
     //delete lesson
-    app.delete("/public-lessons/:id", async (req, res) => {
+    app.delete("/public-lessons/:id",verifyFBToken, async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await lessonsCollection.deleteOne(query);
@@ -265,7 +294,7 @@ async function run() {
     });
 
     //Update Lesson
-    app.put("/public-lessons/:id", async (req, res) => {
+    app.put("/public-lessons/:id",verifyFBToken, async (req, res) => {
       try {
         const id = req.params.id;
         const updatedLesson = req.body;
@@ -296,7 +325,7 @@ async function run() {
     });
 
     //payment related apis
-    app.post("/create-checkout-session", async (req, res) => {
+    app.post("/create-checkout-session",verifyFBToken, async (req, res) => {
       const paymentInfo = req.body;
       console.log(paymentInfo);
 
@@ -328,7 +357,7 @@ async function run() {
     });
 
     // update after payment
-    app.patch("/payment-success", async (req, res) => {
+    app.patch("/payment-success",verifyFBToken, async (req, res) => {
       const sessionId = req.query.session_id;
       const session = await stripe.checkout.sessions.retrieve(sessionId);
       console.log(session);
@@ -370,7 +399,7 @@ async function run() {
     });
 
     // Get all reported lessons grouped by lessonId
-    app.get("/reported-lessons", async (req, res) => {
+    app.get("/reported-lessons",verifyFBToken, async (req, res) => {
       try {
         const reports = await lessonsReportsCollection
           .aggregate([
@@ -402,7 +431,7 @@ async function run() {
     });
 
     // Delete reports for a specific lesson
-    app.delete("/reports/:lessonId", async (req, res) => {
+    app.delete("/reports/:lessonId",verifyFBToken, async (req, res) => {
       const { lessonId } = req.params;
       const result = await lessonsReportsCollection.deleteMany({ lessonId });
       res.send(result);
@@ -546,7 +575,7 @@ async function run() {
     });
 
     // Admin Dashboard Summary API
-    app.get("/admin-summary", async (req, res) => {
+    app.get("/admin-summary",verifyFBToken, async (req, res) => {
       try {
         // total users
         const totalUsers = await userCollection.estimatedDocumentCount();
