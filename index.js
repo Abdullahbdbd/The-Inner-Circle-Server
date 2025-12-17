@@ -126,11 +126,26 @@ async function run() {
     });
 
     //Lessons related apis
-    //get lessons
     app.get("/public-lessons", async (req, res) => {
-      const cursor = lessonsCollection.find();
-      const result = await cursor.toArray();
-      res.send(result);
+      const { search, category, tone, sort } = req.query;
+      const filter = {};
+
+      if (search) filter.title = { $regex: search, $options: "i" };
+      if (category) filter.category = category;
+      if (tone) filter.tone = tone;
+
+      const cursor = lessonsCollection.find(filter);
+      let lessons = await cursor.toArray();
+
+      if (sort === "mostSaved") {
+        lessons.sort(
+          (a, b) => (b.favoritesCount || 0) - (a.favoritesCount || 0)
+        );
+      } else {
+        lessons.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      }
+
+      res.send(lessons);
     });
 
     // Dashboard related apis
