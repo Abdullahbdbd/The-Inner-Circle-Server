@@ -9,7 +9,8 @@ const port = process.env.PORT || 3000;
 
 const admin = require("firebase-admin");
 
-const serviceAccount = require("./the-inner-circle-firebase-adminsdk.json");
+const decoded = Buffer.from(process.env.FB_SERVICE_KEY, 'base64').toString('utf8')
+const serviceAccount = JSON.parse(decoded);
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
@@ -70,6 +71,47 @@ async function run() {
       }
     });
 
+    // Get top contributors of the week
+    app.get("/top-contributors", async (req, res) => {
+      try {
+        const pipeline = [
+          {
+            $group: {
+              _id: "$creatorEmail",
+              creatorName: { $first: "$creatorName" },
+              creatorPhoto: { $first: "$creatorPhoto" },
+              totalLessons: { $sum: 1 },
+            },
+          },
+          { $sort: { totalLessons: -1 } },
+          { $limit: 4 },
+        ];
+
+        const topContributors = await lessonsCollection
+          .aggregate(pipeline)
+          .toArray();
+        res.send(topContributors);
+      } catch (error) {
+        console.error(error);
+        res.status(500).send({ message: "Failed to load top contributors" });
+      }
+    });
+
+    // Get most saved lessons
+    app.get("/most-saved-lessons", async (req, res) => {
+      try {
+        const lessons = await lessonsCollection
+          .find({ privacy: "Public" })
+          .sort({ favoritesCount: -1 })
+          .limit(4)
+          .toArray();
+        res.send(lessons);
+      } catch (error) {
+        console.error(error);
+        res.status(500).send({ message: "Failed to load most saved lessons" });
+      }
+    });
+
     //users related apis
     // Get all users
     app.get("/users", async (req, res) => {
@@ -118,6 +160,20 @@ async function run() {
       res.send(result);
     });
 
+    // Update user profile (name or photo)
+    app.patch("/users/profile/:email", verifyFBToken, async (req, res) => {
+      const { email } = req.params;
+      const { displayName, photoURL } = req.body;
+
+      const result = await userCollection.updateOne(
+        { email },
+        { $set: { displayName, photoURL } }
+      );
+      console.log("Updating user:", email);
+
+      res.send(result);
+    });
+
     //add users
     app.post("/users", async (req, res) => {
       const user = req.body;
@@ -138,23 +194,15 @@ async function run() {
 
     // Get single user info
     app.get("/users/:email", async (req, res) => {
-      const { email } = req.params;
-      const user = await userCollection.findOne({ email });
-      if (!user) return res.status(404).send({ message: "User not found" });
-      res.send(user);
-    });
-
-    // Update user profile (name or photo)
-    app.patch("/users/:email", async (req, res) => {
-      const { email } = req.params;
-      const { displayName, photoURL } = req.body;
-
-      const result = await userCollection.updateOne(
-        { email },
-        { $set: { displayName, photoURL } }
-      );
-
-      res.send(result);
+      try {
+        const email = decodeURIComponent(req.params.email);
+        const user = await userCollection.findOne({ email });
+        if (!user) return res.status(404).send({ message: "User not found" });
+        res.send(user);
+      } catch (err) {
+        console.error("Get user error:", err);
+        res.status(500).send({ message: "Internal Server Error" });
+      }
     });
 
     // get user role
@@ -165,10 +213,11 @@ async function run() {
       res.send({ role: user?.role || "user" });
     });
 
-    //Lessons related apis
+    // Lessons related APIs
     app.get("/public-lessons", async (req, res) => {
       const { search, category, tone, sort } = req.query;
-      const filter = {};
+
+      const filter = { privacy: "Public" };
 
       if (search) filter.title = { $regex: search, $options: "i" };
       if (category) filter.category = category;
@@ -268,18 +317,27 @@ async function run() {
       res.send(result);
     });
 
-    // my lessons
+    // My Lessons
     app.get("/my-lessons", verifyFBToken, async (req, res) => {
+      const { email, sort } = req.query;
       const query = {};
-      const { email } = req.query;
 
-      if (email) {
-        query.creatorEmail = email;
+      if (email) query.creatorEmail = email;
+
+      const cursor = lessonsCollection.find(query);
+      let lessons = await cursor.toArray();
+
+      // Sorting
+      if (sort === "mostSaved") {
+        lessons.sort(
+          (a, b) => (b.favoritesCount || 0) - (a.favoritesCount || 0)
+        );
+      } else {
+        // Default: newest first
+        lessons.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
       }
 
-      const cursor = lessonsCollection.find(query).sort({ createdAt: -1 });
-      const result = await cursor.toArray();
-      res.send(result);
+      res.send(lessons);
     });
 
     // favorite lessons
@@ -368,7 +426,7 @@ async function run() {
     });
 
     // update after payment
-    app.patch("/payment-success", verifyFBToken, async (req, res) => {
+    app.patch("/payment-success", async (req, res) => {
       const sessionId = req.query.session_id;
       const session = await stripe.checkout.sessions.retrieve(sessionId);
       console.log(session);
@@ -376,16 +434,13 @@ async function run() {
       if (session.payment_status === "paid") {
         const id = session.metadata.userId;
         const query = { _id: new ObjectId(id) };
-        const update = {
-          $set: {
-            isPremium: true,
-          },
-        };
+        const update = { $set: { isPremium: true } };
 
         const result = await userCollection.updateOne(query, update);
-        res.send(result);
+        return res.send({ success: true, result });
       }
-      res.send({ success: false });
+
+      return res.send({ success: false });
     });
 
     // Toggle featured status
@@ -664,10 +719,10 @@ async function run() {
     });
 
     // Send a ping to confirm a successful connection
-    await client.db("admin").command({ ping: 1 });
-    console.log(
-      "Pinged your deployment. You successfully connected to MongoDB!"
-    );
+    // await client.db("admin").command({ ping: 1 });
+    // console.log(
+    //   "Pinged your deployment. You successfully connected to MongoDB!"
+    // );
   } finally {
     // Ensures that the client will close when you finish/error
     // await client.close();
