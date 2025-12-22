@@ -47,7 +47,7 @@ Digital Life Lessons Server handles complex data relationships, secure role-base
 ---
 
 ## 🛠️ Setup Guide
-1. `git clone [Your-Server-Repo-Link]`
+1. `git clone [https://github.com/Abdullahbdbd/The-Inner-Circle-Server?tab=readme-ov-file]`
 2. `npm install`
 3. Configure `.env`:
    ```env
