@@ -1,4 +1,4 @@
-```markdown
+
 #⚙️ Digital Life Lessons Server
 
 **Base URL:** [https://the-inner-circle-server.vercel.app/]  
